@@ -2,8 +2,6 @@ let scene, camera, renderer, jugador, enemigos = [];
 let balas = [];
 let puntaje = 0;
 let vida = 100;
-let velocidadAvance = 0.3; // Velocidad de avance constante
-let distanciaRecorrida = 0;
 
 function init() {
     // Configurar escena
@@ -31,11 +29,12 @@ function init() {
     const geometriaJugador = new THREE.BoxGeometry(1, 2, 1);
     const materialJugador = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
     jugador = new THREE.Mesh(geometriaJugador, materialJugador);
-    jugador.position.set(0, 1, 5);
+    jugador.position.z = 5;
     scene.add(jugador);
 
-    // Configurar cámara en tercera persona
-    camera.position.set(0, 5, 15);
+    // Posición de la cámara
+    camera.position.y = 3;
+    camera.position.z = 10;
     camera.lookAt(jugador.position);
 
     // Eventos de teclado
@@ -238,6 +237,7 @@ function disparar() {
     const bala = new THREE.Mesh(geometriaBala, materialBala);
     bala.position.copy(jugador.position);
     bala.position.y += 0.5;
+    bala.velocidad = new THREE.Vector3(0, 0, -0.5);
     balas.push(bala);
     scene.add(bala);
 }
@@ -253,68 +253,32 @@ function crearEnemigo() {
 }
 
 function actualizarJuego() {
-    // Movimiento lateral
-    if (teclas.izquierda) jugador.position.x -= 0.3;
-    if (teclas.derecha) jugador.position.x += 0.3;
-    
-    // Avance automático
-    jugador.position.z -= velocidadAvance;
-    distanciaRecorrida += velocidadAvance;
+    // Mover jugador
+    if (teclas.izquierda) jugador.position.x -= 0.1;
+    if (teclas.derecha) jugador.position.x += 0.1;
+    if (teclas.arriba) jugador.position.z -= 0.1;
+    if (teclas.abajo) jugador.position.z += 0.1;
 
-    // Actualizar posición de la cámara para seguir al jugador
-    camera.position.z = jugador.position.z + 10;
-    camera.position.y = 5;
-    camera.lookAt(jugador.position);
-
-    // Límites laterales
-    jugador.position.x = Math.max(-8, Math.min(8, jugador.position.x));
-
-    // Actualizar posición de los enemigos
-    enemigos.forEach(enemigo => {
-        enemigo.position.z -= velocidadAvance/2; // Los enemigos se mueven más lento
-    });
-
-    // Generar nuevos enemigos adelante
-    if (Math.random() < 0.02) {
-        const enemigo = crearEnemigo();
-        enemigo.position.z = jugador.position.z - 30; // Generar enemigos adelante
-        enemigo.position.x = Math.random() * 16 - 8; // Distribuir en el ancho de la carretera
-        enemigos.push(enemigo);
-    }
+    // Límites del jugador
+    jugador.position.x = Math.max(-5, Math.min(5, jugador.position.x));
+    jugador.position.z = Math.max(-10, Math.min(10, jugador.position.z));
 
     // Actualizar balas
-    balas.forEach(bala => {
-        bala.position.z -= 1; // Las balas van más rápido que el jugador
-    });
+    for (let i = balas.length - 1; i >= 0; i--) {
+        balas[i].position.add(balas[i].velocidad);
+        if (balas[i].position.z < -30) {
+            scene.remove(balas[i]);
+            balas.splice(i, 1);
+        }
+    }
 
-    // Actualizar HUD con distancia recorrida
-    actualizarHUD();
-
-    // Verificar colisiones
-    verificarColisiones();
-}
-
-function actualizarHUD() {
-    document.querySelector('#hud')?.remove();
-    const hud = document.createElement('div');
-    hud.id = 'hud';
-    hud.style.position = 'absolute';
-    hud.style.top = '10px';
-    hud.style.left = '10px';
-    hud.style.color = 'white';
-    hud.style.fontFamily = 'Arial';
-    hud.style.fontSize = '20px';
-    hud.innerHTML = `
-        Puntaje: ${puntaje}<br>
-        Vida: ${vida}<br>
-        Distancia: ${Math.floor(distanciaRecorrida)} m
-    `;
-    document.body.appendChild(hud);
-}
-
-function verificarColisiones() {
-    // Verificar colisiones con balas
+    // Actualizar enemigos
+    if (Math.random() < 0.02) crearEnemigo();
+    
     for (let i = enemigos.length - 1; i >= 0; i--) {
+        enemigos[i].position.z += 0.1;
+        
+        // Verificar colisiones con balas
         for (let j = balas.length - 1; j >= 0; j--) {
             if (enemigos[i].position.distanceTo(balas[j].position) < 1) {
                 scene.remove(enemigos[i]);
@@ -325,10 +289,8 @@ function verificarColisiones() {
                 break;
             }
         }
-    }
 
-    // Verificar si el enemigo pasó al jugador
-    for (let i = enemigos.length - 1; i >= 0; i--) {
+        // Verificar si el enemigo pasó al jugador
         if (enemigos[i] && enemigos[i].position.z > 10) {
             scene.remove(enemigos[i]);
             enemigos.splice(i, 1);
@@ -341,49 +303,43 @@ function verificarColisiones() {
         alert('¡Juego Terminado! Puntaje: ' + puntaje);
         location.reload();
     }
+
+    // Actualizar HUD
+    document.querySelector('#hud')?.remove();
+    const hud = document.createElement('div');
+    hud.id = 'hud';
+    hud.style.position = 'absolute';
+    hud.style.top = '10px';
+    hud.style.left = '10px';
+    hud.style.color = 'white';
+    hud.innerHTML = `Puntaje: ${puntaje}<br>Vida: ${vida}`;
+    document.body.appendChild(hud);
 }
 
 function animate() {
     requestAnimationFrame(animate);
 
-    // Actualizar efectos de velocidad
+    // Efecto de fuego
     scene.children.forEach(objeto => {
-        if(objeto instanceof THREE.Points) {
-            objeto.position.z += velocidadAvance * 2;
-            if(objeto.position.z > camera.position.z) {
-                objeto.position.z -= 50;
-            }
+        if(objeto.type === 'Group') { // Grupos de fuego
+            objeto.children.forEach(llama => {
+                llama.scale.y = 1 + Math.sin(Date.now() * 0.01) * 0.2;
+                llama.material.opacity = 0.5 + Math.sin(Date.now() * 0.005) * 0.2;
+            });
         }
     });
 
-    // Actualizar posición de elementos del escenario
+    // Mover partículas de ceniza
     scene.children.forEach(objeto => {
-        if(objeto.userData.esEscenario) {
-            if(objeto.position.z > camera.position.z + 50) {
-                objeto.position.z -= 200;
-            }
+        if(objeto.type === 'Points') {
+            objeto.rotation.y += 0.0001;
+            objeto.position.y = Math.sin(Date.now() * 0.001) * 0.1;
         }
     });
 
     actualizarJuego();
     renderer.render(scene, camera);
 }
-
-// Añadir eventos para controlar la velocidad
-document.addEventListener('keydown', (event) => {
-    if(event.key === 'Shift') {
-        velocidadAvance = 0.6; // Velocidad aumentada al presionar Shift
-    }
-});
-
-document.addEventListener('keyup', (event) => {
-    if(event.key === 'Shift') {
-        velocidadAvance = 0.3; // Velocidad normal al soltar Shift
-    }
-});
-
-// Inicializar efectos de velocidad
-const efectosVelocidad = efectoVelocidad();
 
 init();
 animate();
